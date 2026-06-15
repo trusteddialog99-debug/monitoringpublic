@@ -1,5 +1,6 @@
 import datetime
 from typing import Optional
+import io
 
 import numpy as np
 import pandas as pd
@@ -45,6 +46,25 @@ def parse_int_series(series: pd.Series) -> pd.Series:
 
 def parse_float_series(series: pd.Series) -> pd.Series:
     return pd.to_numeric(series, errors="coerce").astype(float)
+def fmt_thousands_point(x) -> str:
+    """Format number with German thousands separator (.) and no decimals."""
+    if pd.isna(x):
+        return "N/A"
+    try:
+        return f"{x:,.0f}".replace(",", ".")
+    except Exception:
+        return str(x)
+
+
+def fmt_percent_no_decimal(x) -> str:
+    """Format percent without decimal places and with comma as decimal separator if needed."""
+    if pd.isna(x):
+        return "N/A"
+    try:
+        s = f"{x:.0f}%"
+        return s.replace(".", ",")
+    except Exception:
+        return str(x)
 
 
 def build_monitoring_table(df: pd.DataFrame, threshold: float, min_volume: float) -> pd.DataFrame:
@@ -200,12 +220,56 @@ def main() -> None:
     average_drop = result_df["% Veränderung (Hauptvergleich)"].replace([np.inf, -np.inf], np.nan).dropna().mean()
 
     col1, col2 = st.columns(2)
-    col1.metric("Auffällige Kunden", number_of_customers)
-    col2.metric("Durchschnittlicher Drop (%)", f"{average_drop:.1f}%" if pd.notna(average_drop) else "N/A")
+    col1.metric("Auffällige Kunden", fmt_thousands_point(number_of_customers))
+    col2.metric(
+        "Durchschnittlicher Drop (%)",
+        fmt_percent_no_decimal(average_drop) if pd.notna(average_drop) else "N/A",
+    )
 
-    styled = result_df.style.apply(lambda row: style_drop(row, threshold), axis=1)
+    styled = (
+        result_df.style
+        .apply(lambda row: style_drop(row, threshold), axis=1)
+        .format(
+            {
+                "Aktuelle Woche (0)": fmt_thousands_point,
+                "Vorwoche": fmt_thousands_point,
+                "Vor-Vorwoche": fmt_thousands_point,
+                "Durchschnitt 4 Wochen": fmt_thousands_point,
+                "Durchschnitt 8 Wochen": fmt_thousands_point,
+                "% Veränderung vs Vorwoche": fmt_percent_no_decimal,
+                "% Veränderung vs Ø 4 Wochen": fmt_percent_no_decimal,
+                "% Veränderung vs Ø 8 Wochen": fmt_percent_no_decimal,
+                "% Veränderung (Hauptvergleich)": fmt_percent_no_decimal,
+            },
+            na_rep="N/A",
+        )
+    )
 
     st.dataframe(styled, use_container_width=True)
+
+    # Export: CSV (German format) and Excel
+    csv_str = result_df.to_csv(sep=';', decimal=',', index=False, float_format='%.0f')
+    csv_bytes = csv_str.encode('utf-8-sig')
+
+    towrite = io.BytesIO()
+    with pd.ExcelWriter(towrite, engine='openpyxl') as writer:
+        result_df.to_excel(writer, index=False, sheet_name='Monitoring')
+    towrite.seek(0)
+
+    col_csv, col_xlsx = st.columns(2)
+    col_csv.download_button(
+        label="Download CSV (DE, ; sep, , decimal)",
+        data=csv_bytes,
+        file_name=f"monitoring_{datetime.date.today().isoformat()}.csv",
+        mime="text/csv",
+    )
+
+    col_xlsx.download_button(
+        label="Download Excel (.xlsx)",
+        data=towrite.getvalue(),
+        file_name=f"monitoring_{datetime.date.today().isoformat()}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
     st.markdown(
         """
