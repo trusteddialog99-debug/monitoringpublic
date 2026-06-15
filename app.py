@@ -5,6 +5,7 @@ import io
 import numpy as np
 import pandas as pd
 import streamlit as st
+import plotly.express as px
 
 
 def safe_pct_change(current: float, baseline: float) -> Optional[float]:
@@ -246,6 +247,60 @@ def main() -> None:
     )
 
     st.dataframe(styled, use_container_width=True)
+
+    # Selection: search box + filtered customer picker
+    customers = result_df["tDM Customer ohne SC"].tolist()
+    if "selected_customer" not in st.session_state:
+        st.session_state.selected_customer = customers[0] if customers else None
+
+    search_term = st.text_input("Kunde suchen", value="", help="Teil des Kundennamens eingeben, um die Auswahl einzuschränken.")
+    filtered_customers = [c for c in customers if search_term.lower() in c.lower()] if search_term else customers
+    if not filtered_customers:
+        st.warning("Kein Kunde passt zur Suche. Bitte Suchbegriff anpassen.")
+        filtered_customers = customers
+
+    default_index = 0
+    if st.session_state.selected_customer in filtered_customers:
+        default_index = filtered_customers.index(st.session_state.selected_customer)
+
+    selected = st.selectbox("Kunde auswählen für Historie", filtered_customers, index=default_index)
+    st.session_state.selected_customer = selected
+
+    st.subheader(f"Historisches Mailvolumen für: {selected}")
+
+    # Prepare raw data for the selected customer (use original uploaded data)
+    raw = normalize_columns(data)
+    # Ensure necessary columns and parse types
+    if not {"Jahr", "KW", "tDM Customer ohne SC", "0"}.issubset(set(raw.columns)):
+        st.error("Rohdaten enthalten nicht die benötigten Spalten für das Diagramm.")
+    else:
+        raw["Jahr"] = parse_int_series(raw["Jahr"]).astype(int)
+        raw["KW"] = parse_int_series(raw["KW"]).astype(int)
+        raw["tDM Customer ohne SC"] = raw["tDM Customer ohne SC"].astype(str).str.strip()
+        raw["volume_0"] = parse_float_series(raw["0"]).fillna(np.nan)
+
+        df_cust = raw[raw["tDM Customer ohne SC"] == selected].copy()
+        if df_cust.empty:
+            st.info("Für den ausgewählten Kunden sind keine historischen Daten vorhanden.")
+        else:
+            agg = df_cust.groupby(["Jahr", "KW"], as_index=False)["volume_0"].sum()
+            years = sorted(agg["Jahr"].unique())
+            # Build full grid of Year x KW (1..53) to show gaps
+            full = pd.MultiIndex.from_product([years, list(range(1, 54))], names=["Jahr", "KW"]).to_frame(index=False)
+            full = full.merge(agg, on=["Jahr", "KW"], how="left")
+
+            # Plot: one line per year, KW on x-axis
+            fig = px.line(
+                full,
+                x="KW",
+                y="volume_0",
+                color="Jahr",
+                labels={"KW": "Kalenderwoche (KW)", "volume_0": "Mailvolumen (Spalte 0)", "Jahr": "Jahr"},
+                markers=False,
+            )
+            fig.update_traces(connectgaps=False)
+            fig.update_layout(hovermode="x unified", legend_title_text="Jahr")
+            st.plotly_chart(fig, use_container_width=True)
 
     # Export: CSV (German format) and Excel
     csv_str = result_df.to_csv(sep=';', decimal=',', index=False, float_format='%.0f')
