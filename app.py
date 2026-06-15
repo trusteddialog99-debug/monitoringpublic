@@ -208,11 +208,11 @@ def main() -> None:
         .apply(lambda row: style_drop(row, threshold), axis=1)
         .format(
             {
-                "Aktuelle Woche (0)": "{:, .0f}",
-                "Vorwoche": "{:, .0f}",
-                "Vor-Vorwoche": "{:, .0f}",
-                "Durchschnitt 4 Wochen": "{:, .0f}",
-                "Durchschnitt 8 Wochen": "{:, .0f}",
+                "Aktuelle Woche (0)": "{:,.0f}",
+                "Vorwoche": "{:,.0f}",
+                "Vor-Vorwoche": "{:,.0f}",
+                "Durchschnitt 4 Wochen": "{:,.0f}",
+                "Durchschnitt 8 Wochen": "{:,.0f}",
                 "% Veränderung vs Vorwoche": "{:.0f}%",
                 "% Veränderung vs Ø 4 Wochen": "{:.0f}%",
                 "% Veränderung vs Ø 8 Wochen": "{:.0f}%",
@@ -222,7 +222,7 @@ def main() -> None:
         )
     )
 
-    st.dataframe(styled, use_container_width=True)
+    st.write(styled)
 
     st.markdown(
         """
