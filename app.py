@@ -203,26 +203,9 @@ def main() -> None:
     col1.metric("Auffällige Kunden", number_of_customers)
     col2.metric("Durchschnittlicher Drop (%)", f"{average_drop:.1f}%" if pd.notna(average_drop) else "N/A")
 
-    styled = (
-        result_df.style
-        .apply(lambda row: style_drop(row, threshold), axis=1)
-        .format(
-            {
-                "Aktuelle Woche (0)": "{:,.0f}",
-                "Vorwoche": "{:,.0f}",
-                "Vor-Vorwoche": "{:,.0f}",
-                "Durchschnitt 4 Wochen": "{:,.0f}",
-                "Durchschnitt 8 Wochen": "{:,.0f}",
-                "% Veränderung vs Vorwoche": "{:.0f}%",
-                "% Veränderung vs Ø 4 Wochen": "{:.0f}%",
-                "% Veränderung vs Ø 8 Wochen": "{:.0f}%",
-                "% Veränderung (Hauptvergleich)": "{:.0f}%",
-            },
-            na_rep="N/A",
-        )
-    )
+    styled = result_df.style.apply(lambda row: style_drop(row, threshold), axis=1)
 
-    st.write(styled)
+    st.dataframe(styled, use_container_width=True)
 
     st.markdown(
         """
